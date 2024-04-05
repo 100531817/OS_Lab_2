@@ -196,56 +196,65 @@ int main(int argc, char* argv[])
         if (command_counter > 0) {
             if (command_counter > MAX_COMMANDS) {
                 printf("Error: Maximum number of commands is %d \n", MAX_COMMANDS);
-            } else {
-                for (int i = 0; i < command_counter; i++) {
-                    // Store the complete command for execvp
-                    getCompleteCommand(argvv, i);
+            }
+            // Create pipes for command sequences
+            for (int i = 0; i < command_counter - 1; i++) {
+                if (pipe(pipes[i]) < 0) {
+                    perror("Pipe failed");
+                    exit(EXIT_FAILURE);
+                }
+            }
 
-                    // Forking to create a child process
-                    pid_t pid = fork();
-                    if (pid < 0) {
-                        // Fork failed
-                        perror("Fork failed");
-                    } else if (pid == 0) {
-                        // Child process: Execute the command
+            for (int i = 0; i < command_counter; i++) {
+                // Store the complete command for execvp
+                getCompleteCommand(argvv, i);
 
-                        // If there's an output redirection
-                        if (strcmp(filev[1], "0") != 0) {
-                            int fd = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
-                            if (fd < 0) {
-                                perror("Failed to open the file");
-                                exit(1);
-                            }
-                            dup2(fd, STDOUT_FILENO);
-                            close(fd);
-                        }
+                // Forking to create a child process
+                pid_t pid = fork();
+                if (pid < 0) {
+                    // Fork failed
+                    perror("Fork failed");
+                    exit(EXIT_FAILURE);
+                } else if (pid == 0) {
+                    // Child process
 
-                        // If there's an input redirection
-                        if (strcmp(filev[0], "0") != 0) {
-                            int fd = open(filev[0], O_RDONLY);
-                            if (fd < 0) {
-                                perror("Failed to open the file");
-                                exit(1);
-                            }
-                            dup2(fd, STDIN_FILENO);
-                            close(fd);
-                        }
+                    // If it's not the first command, redirect input from the previous pipe
+                    if (i > 0) {
+                        dup2(pipes[i - 1][0], STDIN_FILENO);
+                    }
 
-                        // Execute the command
-                        if (execvp(argv_execvp[0], argv_execvp) < 0) {
-                            perror("Exec failed");
-                            exit(1);
-                        }
-                    } else {
-                        // Parent process: Wait for the child to complete if not in background
-                        if (!in_background) {
-                            waitpid(pid, NULL, 0);
-                        } else {
-                            printf("Command executed in background with PID: %d\n", pid);
-                        }
+                    // If it's not the last command, redirect output to the next pipe
+                    if (i < command_counter - 1) {
+                        dup2(pipes[i][1], STDOUT_FILENO);
+                    }
 
+                    // Close all pipe fds
+                    for (int j = 0; j < command_counter - 1; j++) {
+                        close(pipes[j][0]);
+                        close(pipes[j][1]);
+                    }
+
+                    // Execute the command
+                    if (execvp(argv_execvp[0], argv_execvp) < 0) {
+                        perror("Exec failed");
+                        exit(EXIT_FAILURE);
                     }
                 }
+            }
+
+            // Parent process: Close all pipe fds
+            for (int i = 0; i < command_counter - 1; i++) {
+                close(pipes[i][0]);
+                close(pipes[i][1]);
+            }
+
+            // Parent process: Wait for all child processes if not in background
+            if (!in_background) {
+                for (int i = 0; i < command_counter; i++) {
+                    wait(NULL);
+                }
+            } else {
+                printf("Commands executed in background\n");
             }
         }
     }
