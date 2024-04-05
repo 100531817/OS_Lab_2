@@ -165,28 +165,26 @@ int main(int argc, char* argv[])
     history = (struct command*) malloc(history_size *sizeof(struct command));
     int run_history = 0;
 
-    while (1)
-    {
+    int pipes[MAX_COMMANDS - 1][2];
+
+    while (1) {
         int status = 0;
         int command_counter = 0;
         int in_background = 0;
         signal(SIGINT, siginthandler);
 
-        if (run_history)
-        {
-            run_history=0;
-        }
-        else{
+        if (run_history) {
+            run_history = 0;
+        } else {
             // Prompt
             write(STDERR_FILENO, "MSH>>", strlen("MSH>>"));
 
             // Get command
             //********** DO NOT MODIFY THIS PART. IT DISTINGUISH BETWEEN NORMAL/CORRECTION MODE***************
             executed_cmd_lines++;
-            if( end != 0 && executed_cmd_lines < end) {
+            if (end != 0 && executed_cmd_lines < end) {
                 command_counter = read_command_correction(&argvv, filev, &in_background, cmd_lines[executed_cmd_lines]);
-            }
-            else if( end != 0 && executed_cmd_lines == end)
+            } else if (end != 0 && executed_cmd_lines == end)
                 return 0;
             else
                 command_counter = read_command(&argvv, filev, &in_background); //NORMAL MODE
@@ -196,10 +194,9 @@ int main(int argc, char* argv[])
 
         /************************ STUDENTS CODE ********************************/
         if (command_counter > 0) {
-            if (command_counter > MAX_COMMANDS){
+            if (command_counter > MAX_COMMANDS) {
                 printf("Error: Maximum number of commands is %d \n", MAX_COMMANDS);
-            }
-            else {
+            } else {
                 for (int i = 0; i < command_counter; i++) {
                     // Store the complete command for execvp
                     getCompleteCommand(argvv, i);
@@ -246,6 +243,7 @@ int main(int argc, char* argv[])
                         } else {
                             printf("Command executed in background with PID: %d\n", pid);
                         }
+
                     }
                 }
             }
