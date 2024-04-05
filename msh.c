@@ -27,9 +27,9 @@ char *argv_execvp[8];
 
 void siginthandler(int param)
 {
-	printf("****  Exiting MSH **** \n");
-	//signal(SIGINT, siginthandler);
-	exit(0);
+    printf("****  Exiting MSH **** \n");
+    //signal(SIGINT, siginthandler);
+    exit(0);
 }
 
 /* myhistory */
@@ -38,16 +38,16 @@ void siginthandler(int param)
 
 struct command
 {
-  // Store the number of commands in argvv
-  int num_commands;
-  // Store the number of arguments of each command
-  int *args;
-  // Store the commands
-  char ***argvv;
-  // Store the I/O redirection
-  char filev[3][64];
-  // Store if the command is executed in background or foreground
-  int in_background;
+    // Store the number of commands in argvv
+    int num_commands;
+    // Store the number of arguments of each command
+    int *args;
+    // Store the commands
+    char ***argvv;
+    // Store the I/O redirection
+    char filev[3][64];
+    // Store if the command is executed in background or foreground
+    int in_background;
 };
 
 int history_size = 20;
@@ -124,87 +124,133 @@ void store_command(char ***argvv, char filev[3][64], int in_background, struct c
  * @return
  */
 void getCompleteCommand(char*** argvv, int num_command) {
-	//reset first
-	for(int j = 0; j < 8; j++)
-		argv_execvp[j] = NULL;
+    //reset first
+    for(int j = 0; j < 8; j++)
+        argv_execvp[j] = NULL;
 
-	int i = 0;
-	for ( i = 0; argvv[num_command][i] != NULL; i++)
-		argv_execvp[i] = argvv[num_command][i];
+    int i = 0;
+    for ( i = 0; argvv[num_command][i] != NULL; i++)
+        argv_execvp[i] = argvv[num_command][i];
 }
 
 
 /**
- * Main sheell  Loop  
+ * Main sheell  Loop
  */
 int main(int argc, char* argv[])
 {
-	/**** Do not delete this code.****/
-	int end = 0; 
-	int executed_cmd_lines = -1;
-	char *cmd_line = NULL;
-	char *cmd_lines[10];
+    /**** Do not delete this code.****/
+    int end = 0;
+    int executed_cmd_lines = -1;
+    char *cmd_line = NULL;
+    char *cmd_lines[10];
 
-	if (!isatty(STDIN_FILENO)) {
-		cmd_line = (char*)malloc(100);
-		while (scanf(" %[^\n]", cmd_line) != EOF){
-			if(strlen(cmd_line) <= 0) return 0;
-			cmd_lines[end] = (char*)malloc(strlen(cmd_line)+1);
-			strcpy(cmd_lines[end], cmd_line);
-			end++;
-			fflush (stdin);
-			fflush(stdout);
-		}
-	}
-
-	/*********************************/
-
-	char ***argvv = NULL;
-	int num_commands;
-
-	history = (struct command*) malloc(history_size *sizeof(struct command));
-	int run_history = 0;
-
-	while (1) 
-	{
-		int status = 0;
-		int command_counter = 0;
-		int in_background = 0;
-		signal(SIGINT, siginthandler);
-
-		if (run_history)
-    {
-        run_history=0;
-    }
-    else{
-        // Prompt 
-        write(STDERR_FILENO, "MSH>>", strlen("MSH>>"));
-
-        // Get command
-        //********** DO NOT MODIFY THIS PART. IT DISTINGUISH BETWEEN NORMAL/CORRECTION MODE***************
-        executed_cmd_lines++;
-        if( end != 0 && executed_cmd_lines < end) {
-            command_counter = read_command_correction(&argvv, filev, &in_background, cmd_lines[executed_cmd_lines]);
+    if (!isatty(STDIN_FILENO)) {
+        cmd_line = (char*)malloc(100);
+        while (scanf(" %[^\n]", cmd_line) != EOF){
+            if(strlen(cmd_line) <= 0) return 0;
+            cmd_lines[end] = (char*)malloc(strlen(cmd_line)+1);
+            strcpy(cmd_lines[end], cmd_line);
+            end++;
+            fflush (stdin);
+            fflush(stdout);
         }
-        else if( end != 0 && executed_cmd_lines == end)
-            return 0;
-        else
-            command_counter = read_command(&argvv, filev, &in_background); //NORMAL MODE
     }
-		//************************************************************************************************
+
+    /*********************************/
+
+    char ***argvv = NULL;
+    int num_commands;
+
+    history = (struct command*) malloc(history_size *sizeof(struct command));
+    int run_history = 0;
+
+    while (1)
+    {
+        int status = 0;
+        int command_counter = 0;
+        int in_background = 0;
+        signal(SIGINT, siginthandler);
+
+        if (run_history)
+        {
+            run_history=0;
+        }
+        else{
+            // Prompt
+            write(STDERR_FILENO, "MSH>>", strlen("MSH>>"));
+
+            // Get command
+            //********** DO NOT MODIFY THIS PART. IT DISTINGUISH BETWEEN NORMAL/CORRECTION MODE***************
+            executed_cmd_lines++;
+            if( end != 0 && executed_cmd_lines < end) {
+                command_counter = read_command_correction(&argvv, filev, &in_background, cmd_lines[executed_cmd_lines]);
+            }
+            else if( end != 0 && executed_cmd_lines == end)
+                return 0;
+            else
+                command_counter = read_command(&argvv, filev, &in_background); //NORMAL MODE
+        }
+        //************************************************************************************************
 
 
-		/************************ STUDENTS CODE ********************************/
-	   if (command_counter > 0) {
-			if (command_counter > MAX_COMMANDS){
-				printf("Error: Maximum number of commands is %d \n", MAX_COMMANDS);
-			}
-			else {
-				// Print command
-				print_command(argvv, filev, in_background);
-			}
-		}
-	}
-	
-	return 0;
+        /************************ STUDENTS CODE ********************************/
+        if (command_counter > 0) {
+            if (command_counter > MAX_COMMANDS){
+                printf("Error: Maximum number of commands is %d \n", MAX_COMMANDS);
+            }
+            else {
+                for (int i = 0; i < command_counter; i++) {
+                    // Store the complete command for execvp
+                    getCompleteCommand(argvv, i);
+
+                    // Forking to create a child process
+                    pid_t pid = fork();
+                    if (pid < 0) {
+                        // Fork failed
+                        perror("Fork failed");
+                    } else if (pid == 0) {
+                        // Child process: Execute the command
+
+                        // If there's an output redirection
+                        if (strcmp(filev[1], "0") != 0) {
+                            int fd = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
+                            if (fd < 0) {
+                                perror("Failed to open the file");
+                                exit(1);
+                            }
+                            dup2(fd, STDOUT_FILENO);
+                            close(fd);
+                        }
+
+                        // If there's an input redirection
+                        if (strcmp(filev[0], "0") != 0) {
+                            int fd = open(filev[0], O_RDONLY);
+                            if (fd < 0) {
+                                perror("Failed to open the file");
+                                exit(1);
+                            }
+                            dup2(fd, STDIN_FILENO);
+                            close(fd);
+                        }
+
+                        // Execute the command
+                        if (execvp(argv_execvp[0], argv_execvp) < 0) {
+                            perror("Exec failed");
+                            exit(1);
+                        }
+                    } else {
+                        // Parent process: Wait for the child to complete if not in background
+                        if (!in_background) {
+                            waitpid(pid, NULL, 0);
+                        } else {
+                            printf("[%d]\n", pid);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    free(history); // Don't forget to free allocated memory
+    return 0;
 }
