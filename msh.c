@@ -244,7 +244,7 @@ int main(int argc, char* argv[])
                         if (!in_background) {
                             waitpid(pid, NULL, 0);
                         } else {
-                            printf("[%d]\n", pid);
+                            printf("Command executed in background with PID: %d\n", pid);
                         }
                     }
                 }
