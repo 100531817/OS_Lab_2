@@ -133,6 +133,11 @@ void getCompleteCommand(char*** argvv, int num_command) {
         argv_execvp[i] = argvv[num_command][i];
 }
 
+// New SIGCHLD handler to avoid zombie processes
+void sigchld_handler(int sig) {
+    // Use waitpid in a loop to reap all exited children
+    while(waitpid(-1, NULL, WNOHANG) > 0);
+}
 
 /**
  * Main sheell  Loop
@@ -157,6 +162,14 @@ int main(int argc, char* argv[])
         }
     }
 
+    // Register SIGCHLD handler
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = sigchld_handler;
+    sa.sa_flags = SA_RESTART;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGCHLD, &sa, NULL);
+
     /*********************************/
 
     char ***argvv = NULL;
@@ -165,26 +178,28 @@ int main(int argc, char* argv[])
     history = (struct command*) malloc(history_size *sizeof(struct command));
     int run_history = 0;
 
-    int pipes[MAX_COMMANDS - 1][2];
-
-    while (1) {
+    while (1)
+    {
         int status = 0;
         int command_counter = 0;
         int in_background = 0;
         signal(SIGINT, siginthandler);
 
-        if (run_history) {
-            run_history = 0;
-        } else {
+        if (run_history)
+        {
+            run_history=0;
+        }
+        else{
             // Prompt
             write(STDERR_FILENO, "MSH>>", strlen("MSH>>"));
 
             // Get command
             //********** DO NOT MODIFY THIS PART. IT DISTINGUISH BETWEEN NORMAL/CORRECTION MODE***************
             executed_cmd_lines++;
-            if (end != 0 && executed_cmd_lines < end) {
+            if( end != 0 && executed_cmd_lines < end) {
                 command_counter = read_command_correction(&argvv, filev, &in_background, cmd_lines[executed_cmd_lines]);
-            } else if (end != 0 && executed_cmd_lines == end)
+            }
+            else if( end != 0 && executed_cmd_lines == end)
                 return 0;
             else
                 command_counter = read_command(&argvv, filev, &in_background); //NORMAL MODE
@@ -194,67 +209,58 @@ int main(int argc, char* argv[])
 
         /************************ STUDENTS CODE ********************************/
         if (command_counter > 0) {
-            if (command_counter > MAX_COMMANDS) {
+            if (command_counter > MAX_COMMANDS){
                 printf("Error: Maximum number of commands is %d \n", MAX_COMMANDS);
             }
-            // Create pipes for command sequences
-            for (int i = 0; i < command_counter - 1; i++) {
-                if (pipe(pipes[i]) < 0) {
-                    perror("Pipe failed");
-                    exit(EXIT_FAILURE);
-                }
-            }
-
-            for (int i = 0; i < command_counter; i++) {
-                // Store the complete command for execvp
-                getCompleteCommand(argvv, i);
-
-                // Forking to create a child process
-                pid_t pid = fork();
-                if (pid < 0) {
-                    // Fork failed
-                    perror("Fork failed");
-                    exit(EXIT_FAILURE);
-                } else if (pid == 0) {
-                    // Child process
-
-                    // If it's not the first command, redirect input from the previous pipe
-                    if (i > 0) {
-                        dup2(pipes[i - 1][0], STDIN_FILENO);
-                    }
-
-                    // If it's not the last command, redirect output to the next pipe
-                    if (i < command_counter - 1) {
-                        dup2(pipes[i][1], STDOUT_FILENO);
-                    }
-
-                    // Close all pipe fds
-                    for (int j = 0; j < command_counter - 1; j++) {
-                        close(pipes[j][0]);
-                        close(pipes[j][1]);
-                    }
-
-                    // Execute the command
-                    if (execvp(argv_execvp[0], argv_execvp) < 0) {
-                        perror("Exec failed");
-                        exit(EXIT_FAILURE);
-                    }
-                }
-            }
-
-            // Parent process: Close all pipe fds
-            for (int i = 0; i < command_counter - 1; i++) {
-                close(pipes[i][0]);
-                close(pipes[i][1]);
-            }
-
-            // Parent process: Wait for all child processes if not in background
-            if (!in_background) {
+            else {
                 for (int i = 0; i < command_counter; i++) {
-                    wait(NULL);
+                    // Store the complete command for execvp
+                    getCompleteCommand(argvv, i);
+
+                    // Forking to create a child process
+                    pid_t pid = fork();
+                    if (pid < 0) {
+                        // Fork failed
+                        perror("Fork failed");
+                    } else if (pid == 0) {
+                        // Child process: Execute the command
+
+                        // If there's an output redirection
+                        if (strcmp(filev[1], "0") != 0) {
+                            int fd = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
+                            if (fd < 0) {
+                                perror("Failed to open the file");
+                                exit(1);
+                            }
+                            dup2(fd, STDOUT_FILENO);
+                            close(fd);
+                        }
+
+                        // If there's an input redirection
+                        if (strcmp(filev[0], "0") != 0) {
+                            int fd = open(filev[0], O_RDONLY);
+                            if (fd < 0) {
+                                perror("Failed to open the file");
+                                exit(1);
+                            }
+                            dup2(fd, STDIN_FILENO);
+                            close(fd);
+                        }
+
+                        // Execute the command
+                        if (execvp(argv_execvp[0], argv_execvp) < 0) {
+                            perror("Exec failed");
+                            exit(1);
+                        }
+                    } else {
+                        // Parent process: Wait for the child to complete if not in background
+                        if (!in_background) {
+                            waitpid(pid, NULL, 0);
+                        } else {
+                            printf("Command executed in background with PID: %d\n", pid);
+                        }
+                    }
                 }
-            } else {
-                printf("Commands executed in background\n");
             }
         }
     }
