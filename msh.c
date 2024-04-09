@@ -32,6 +32,11 @@ void siginthandler(int param)
     exit(0);
 }
 
+//Function Declarations for mycalc
+void execute_mycalc(const char* operand1_str, const char* operation, const char* operand2_str);
+
+int check_and_execute_mycalc(char*** argvv, char filev[3][64], int in_background);
+
 /* myhistory */
 
 /* myhistory */
@@ -113,6 +118,55 @@ void store_command(char ***argvv, char filev[3][64], int in_background, struct c
             strcpy((*cmd).argvv[i][j], argvv[i][j] );
         }
     }
+}
+
+// Function to perform the arithmetic operation and print the result
+void execute_mycalc(const char* operand1_str, const char* operation, const char* operand2_str) {
+    int operand1 = atoi(operand1_str);
+    int operand2 = atoi(operand2_str);
+    int result;
+    static int acc = 0; // Static variable to keep track of the accumulated sum
+
+    // Determine the operation
+    if (strcmp(operation, "add") == 0) {
+        result = operand1 + operand2;
+        acc += result; // Accumulate the sum
+        fprintf(stderr, "[OK] %d + %d = %d; Acc %d\n", operand1, operand2, result, acc);
+    } else if (strcmp(operation, "mul") == 0) {
+        result = operand1 * operand2;
+        fprintf(stderr, "[OK] %d * %d = %d\n", operand1, operand2, result);
+    } else if (strcmp(operation, "div") == 0) {
+        if (operand2 == 0) {
+            printf("[ERROR] Division by zero is not allowed\n");
+            return;
+        }
+        int quotient = operand1 / operand2;
+        int remainder = operand1 % operand2;
+        fprintf(stderr, "[OK] %d / %d = %d; Remainder %d\n", operand1, operand2, quotient, remainder);
+    } else {
+        printf("[ERROR] The structure of the command is mycalc <operand_1> <add/mul/div> <operand_2>\n");
+    }
+}
+
+// Check if the command is mycalc and execute it
+int check_and_execute_mycalc(char*** argvv, char filev[3][64], int in_background) {
+    // Check if the first argument is "mycalc"
+    if (strcmp(argvv[0][0], "mycalc") == 0) {
+        // Check that it is not a background command and there is no redirection
+        if (strcmp(filev[0], "0") != 0 || strcmp(filev[1], "0") != 0 ||
+            strcmp(filev[2], "0") != 0 || in_background) {
+            printf("[ERROR] mycalc does not support background execution or redirection.\n");
+            return 1; // Still return 1 to prevent further processing
+        }
+        // Check if there are exactly 4 arguments: "mycalc", "operand1", "operation", "operand2"
+        if (argvv[0][1] != NULL && argvv[0][2] != NULL && argvv[0][3] != NULL && argvv[0][4] == NULL) {
+            execute_mycalc(argvv[0][1], argvv[0][2], argvv[0][3]);
+        } else {
+            printf("[ERROR] The structure of the command is mycalc <operand_1> <add/mul/div> <operand_2>\n");
+        }
+        return 1;
+    }
+    return 0;
 }
 
 
@@ -209,119 +263,123 @@ int main(int argc, char* argv[])
 
         /************************ STUDENTS CODE ********************************/
         if (command_counter > 0) {
-            if (command_counter > MAX_COMMANDS) {
-                printf("Error: Maximum number of commands is %d \n", MAX_COMMANDS);
-            } else {
-                pid_t manager_pid = 0;
-                if (in_background) {
-                    manager_pid = fork(); // Fork a manager process for background tasks
-                }
-
-                if (manager_pid == 0 || !in_background) { // Proceed if it's a foreground task or inside the manager process
-                    int pipe_fds[2 * (command_counter - 1)]; // Array to hold the file descriptors for all pipes
-
-                    // Create all needed pipes
-                    for (int i = 0; i < command_counter - 1; i++) {
-                        if (pipe(pipe_fds + i * 2) < 0) {
-                            perror("Couldn't Pipe");
-                            exit(EXIT_FAILURE);
-                        }
+            // First, handle internal commands like 'mycalc'
+            int internal_cmd_handled = check_and_execute_mycalc(argvv, filev, in_background);
+            if(!internal_cmd_handled) {
+                if (command_counter > MAX_COMMANDS) {
+                    printf("Error: Maximum number of commands is %d \n", MAX_COMMANDS);
+                } else {
+                    pid_t manager_pid = 0;
+                    if (in_background) {
+                        manager_pid = fork(); // Fork a manager process for background tasks
                     }
 
-                    for (int i = 0; i < command_counter; i++) {
-                        pid_t pid = fork();
-                        if (pid == 0) {
-                            // Input redirection for the first command
-                            if (i == 0 && strcmp(filev[0], "0") != 0) {
-                                int in_fd = open(filev[0], O_RDONLY);
-                                if (in_fd < 0) {
-                                    perror("Failed to open input file");
-                                    exit(EXIT_FAILURE);
-                                }
-                                dup2(in_fd, STDIN_FILENO);
-                                close(in_fd);
-                            }
+                    if (manager_pid == 0 || !in_background) { // Proceed if it's a foreground task or inside the manager process
+                        int pipe_fds[2 * (command_counter - 1)]; // Array to hold the file descriptors for all pipes
 
-                            // Output redirection for the last command
-                            if (i == command_counter - 1 && strcmp(filev[1], "0") != 0) {
-                                int out_fd = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
-                                if (out_fd < 0) {
-                                    perror("Failed to open output file");
-                                    exit(EXIT_FAILURE);
-                                }
-                                dup2(out_fd, STDOUT_FILENO);
-                                close(out_fd);
-                            }
-
-                            // Error redirection for all commands
-                            if (strcmp(filev[2], "0") != 0) {
-                                int err_fd = open(filev[2], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
-                                if (err_fd < 0) {
-                                    perror("Failed to open error file");
-                                    exit(EXIT_FAILURE);
-                                }
-                                dup2(err_fd, STDERR_FILENO);
-                                close(err_fd);
-                            }
-
-                            // Pipe setup for all commands except the first
-                            if (i != 0) {
-                                if (dup2(pipe_fds[(i - 1) * 2], STDIN_FILENO) < 0) {
-                                    perror("dup2");
-                                    exit(EXIT_FAILURE);
-                                }
-                            }
-
-                            // Pipe setup for all commands except the last
-                            if (i != command_counter - 1) {
-                                if (dup2(pipe_fds[i * 2 + 1], STDOUT_FILENO) < 0) {
-                                    perror("dup2");
-                                    exit(EXIT_FAILURE);
-                                }
-                            }
-
-                            // Close all pipe file descriptors
-                            for (int j = 0; j < 2 * (command_counter - 1); j++) {
-                                close(pipe_fds[j]);
-                            }
-
-                            // Execute the command
-                            getCompleteCommand(argvv, i); // Prepare the command for execvp
-                            if (execvp(argv_execvp[0], argv_execvp) < 0) {
-                                perror("execvp");
+                        // Create all needed pipes
+                        for (int i = 0; i < command_counter - 1; i++) {
+                            if (pipe(pipe_fds + i * 2) < 0) {
+                                perror("Couldn't Pipe");
                                 exit(EXIT_FAILURE);
                             }
-                        } else if (pid < 0) {
-                            perror("error");
-                            exit(EXIT_FAILURE);
-                        } else {
-                            if (i < command_counter - 1) {
-                                close(pipe_fds[i * 2 + 1]); // Close write end of the current pipe
-                            }
-                            if (i > 0) {
-                                close(pipe_fds[(i - 1) * 2]); // Close read end of the previous pipe
-                            }
+                        }
 
-                            if (!in_background) {
-                                int status;
-                                waitpid(pid, &status, 0); // Wait for each command to finish in foreground tasks
+                        for (int i = 0; i < command_counter; i++) {
+                            pid_t pid = fork();
+                            if (pid == 0) {
+                                // Input redirection for the first command
+                                if (i == 0 && strcmp(filev[0], "0") != 0) {
+                                    int in_fd = open(filev[0], O_RDONLY);
+                                    if (in_fd < 0) {
+                                        perror("Failed to open input file");
+                                        exit(EXIT_FAILURE);
+                                    }
+                                    dup2(in_fd, STDIN_FILENO);
+                                    close(in_fd);
+                                }
+
+                                // Output redirection for the last command
+                                if (i == command_counter - 1 && strcmp(filev[1], "0") != 0) {
+                                    int out_fd = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
+                                    if (out_fd < 0) {
+                                        perror("Failed to open output file");
+                                        exit(EXIT_FAILURE);
+                                    }
+                                    dup2(out_fd, STDOUT_FILENO);
+                                    close(out_fd);
+                                }
+
+                                // Error redirection for all commands
+                                if (strcmp(filev[2], "0") != 0) {
+                                    int err_fd = open(filev[2], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
+                                    if (err_fd < 0) {
+                                        perror("Failed to open error file");
+                                        exit(EXIT_FAILURE);
+                                    }
+                                    dup2(err_fd, STDERR_FILENO);
+                                    close(err_fd);
+                                }
+
+                                // Pipe setup for all commands except the first
+                                if (i != 0) {
+                                    if (dup2(pipe_fds[(i - 1) * 2], STDIN_FILENO) < 0) {
+                                        perror("dup2");
+                                        exit(EXIT_FAILURE);
+                                    }
+                                }
+
+                                // Pipe setup for all commands except the last
+                                if (i != command_counter - 1) {
+                                    if (dup2(pipe_fds[i * 2 + 1], STDOUT_FILENO) < 0) {
+                                        perror("dup2");
+                                        exit(EXIT_FAILURE);
+                                    }
+                                }
+
+                                // Close all pipe file descriptors
+                                for (int j = 0; j < 2 * (command_counter - 1); j++) {
+                                    close(pipe_fds[j]);
+                                }
+
+                                // Execute the command
+                                getCompleteCommand(argvv, i); // Prepare the command for execvp
+                                if (execvp(argv_execvp[0], argv_execvp) < 0) {
+                                    perror("execvp");
+                                    exit(EXIT_FAILURE);
+                                }
+                            } else if (pid < 0) {
+                                perror("error");
+                                exit(EXIT_FAILURE);
+                            } else {
+                                if (i < command_counter - 1) {
+                                    close(pipe_fds[i * 2 + 1]); // Close write end of the current pipe
+                                }
+                                if (i > 0) {
+                                    close(pipe_fds[(i - 1) * 2]); // Close read end of the previous pipe
+                                }
+
+                                if (!in_background) {
+                                    int status;
+                                    waitpid(pid, &status, 0); // Wait for each command to finish in foreground tasks
+                                }
                             }
                         }
-                    }
 
 
-                    // Close all pipe file descriptors in the parent
-                    for (int i = 0; i < 2 * (command_counter - 1); i++) {
-                        close(pipe_fds[i]);
-                    }
-                    if (in_background) {
-                        exit(0); // Exit the manager process to prevent it from continuing the main loop
-                    }
+                        // Close all pipe file descriptors in the parent
+                        for (int i = 0; i < 2 * (command_counter - 1); i++) {
+                            close(pipe_fds[i]);
+                        }
+                        if (in_background) {
+                            exit(0); // Exit the manager process to prevent it from continuing the main loop
+                        }
 
-                } else if (manager_pid > 0 && in_background) {
-                    // Main shell process for background tasks
-                    printf("[%d] %d\n", 1, manager_pid);  // Simplified background job notification
-                    fflush(stdout);  // Flush the output to ensure the shell prompt is displayed immediately
+                    } else if (manager_pid > 0 && in_background) {
+                        // Main shell process for background tasks
+                        printf("[%d] %d\n", 1, manager_pid);  // Simplified background job notification
+                        fflush(stdout);  // Flush the output to ensure the shell prompt is displayed immediately
+                    }
                 }
             }
         }
