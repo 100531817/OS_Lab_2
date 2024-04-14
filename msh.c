@@ -188,8 +188,8 @@ int check_and_execute_mycalc(char*** argvv, char filev[3][64], int in_background
  */
 int execute_history_command(int index) {
     if (index < 0 || index >= n_elem || index >= history_size) {
-        fprintf(stderr, "ERROR: Command not found\n");
-        return -1;
+        printf("ERROR: Command not found\n");
+        return 1;
     }
 
     int pos = (head + index) % history_size;
