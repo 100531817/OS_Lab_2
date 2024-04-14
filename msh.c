@@ -33,10 +33,6 @@ void siginthandler(int param)
 }
 
 /* Function Declarations for helper functions */
-void execute_mycalc(const char* operand1_str, const char* operation, const char* operand2_str);
-
-int check_and_execute_mycalc(char*** argvv, char filev[3][64], int in_background);
-
 void execute_command_sequence(char ***argvv, char filev[3][64], int num_commands, int in_background);
 
 void getCompleteCommand(char*** argvv, int num_command);
@@ -215,19 +211,28 @@ void myhistory(char **argv) {
         // Display the last 20 commands
         for (int i = 0; i < n_elem; i++) {
             int pos = (head + i) % history_size;
-            fprintf(stderr, "%d: ", i);  // Print the command index
-
+            fprintf(stderr, "%d ", i);  // Print the command index
             // Loop through each command sequence
-            for (int j = 0; j <= history[pos].num_commands; j++) {
+            for (int j = 0; j < history[pos].num_commands; j++) {
                 // Loop through each argument in the command
+                if (j > 0) fprintf(stderr, "| ");  // Add separator for command sequences
                 for (int k = 0; k < history[pos].args[j]; k++) {
                     fprintf(stderr, "%s ", history[pos].argvv[j][k]);
                 }
-                if (j < history[pos].num_commands - 1) {
-                    fprintf(stderr, "| ");  // Separate command sequences with a pipe symbol
-                }
             }
-
+            // Display redirections and background flag using `filev` array similar to command execution
+            if (strcmp(history[pos].filev[0], "0") != 0) {
+                fprintf(stderr, "< %s ", history[pos].filev[0]);  // Input redirection
+            }
+            if (strcmp(history[pos].filev[1], "0") != 0) {
+                fprintf(stderr, "> %s ", history[pos].filev[1]);  // Output redirection
+            }
+            if (strcmp(history[pos].filev[2], "0") != 0) {
+                fprintf(stderr, "!> %s ", history[pos].filev[2]);  // Error redirection
+            }
+            if (history[pos].in_background) {
+                fprintf(stderr, "&");  // Check if the command was run in background
+            }
             fprintf(stderr, "\n");  // New line after each full command sequence
         }
     } else {
