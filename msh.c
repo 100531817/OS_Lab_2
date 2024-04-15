@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <ctype.h>
 
 #define MAX_COMMANDS 8
 
@@ -117,6 +118,24 @@ void store_command(char ***argvv, char filev[3][64], int in_background, struct c
     }
 }
 
+/**
+ * Checks if a given string represents a valid integer.
+ * @param str
+ * @return Returns 1 if the string is a valid integer, 0 otherwise.
+ */
+int is_valid_integer(const char *str) {
+    // Handle negative numbers and skip sign
+    if (*str == '-' || *str == '+') str++;
+    // Check for empty string after the sign
+    if (!*str) return 0;
+    // Check each character to ensure it's a digit
+    while (*str) {
+        if (!isdigit((unsigned char)*str)) return 0;
+        str++;
+    }
+    return 1; // Every character was a digit
+}
+
 /* mycalc */
 /**
  * Function to perform the arithmetic operation and print the result
@@ -126,6 +145,12 @@ void store_command(char ***argvv, char filev[3][64], int in_background, struct c
  * @return
  */
 void execute_mycalc(const char* operand1_str, const char* operation, const char* operand2_str) {
+    // Check if operands are valid integers
+    if (!is_valid_integer(operand1_str) || !is_valid_integer(operand2_str)) {
+        printf("[ERROR] Both operands must be valid integers.\n");
+        return;
+    }
+
     int operand1 = atoi(operand1_str);
     int operand2 = atoi(operand2_str);
     int result;
