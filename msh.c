@@ -147,7 +147,7 @@ int is_valid_integer(const char *str) {
 void execute_mycalc(const char* operand1_str, const char* operation, const char* operand2_str) {
     // Check if operands are valid integers
     if (!is_valid_integer(operand1_str) || !is_valid_integer(operand2_str)) {
-        printf("[ERROR] Both operands must be valid integers.\n");
+        printf("[ERROR] The structure of the command is mycalc <operand_1> <add/mul/div> <operand_2>\n");
         return;
     }
 
@@ -161,6 +161,9 @@ void execute_mycalc(const char* operand1_str, const char* operation, const char*
         result = operand1 + operand2;
         acc += result; // Accumulate the sum
         fprintf(stderr, "[OK] %d + %d = %d; Acc %d\n", operand1, operand2, result, acc);
+        char acc_str[20];  // Buffer to hold the value of acc as a string
+        sprintf(acc_str, "%d", acc);  // Convert integer to string
+        setenv("Acc", acc_str, 1);  // Update the environment variable
     } else if (strcmp(operation, "mul") == 0) {
         result = operand1 * operand2;
         fprintf(stderr, "[OK] %d * %d = %d\n", operand1, operand2, result);
@@ -209,7 +212,7 @@ int check_and_execute_mycalc(char*** argvv, char filev[3][64], int in_background
 /**
  * Executes the desired command from history.
  * @param index
- * @return
+ * @return 1 or 0 depending on if command is successfully executed
  */
 int execute_history_command(int index) {
     if (index < 0 || index >= n_elem || index >= history_size) {
